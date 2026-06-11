@@ -1,153 +1,141 @@
 import streamlit as st
-from google import genai
-from google.genai import types
+import json
+import os
+from datetime import date
 
-# -----------------------------
 # 페이지 설정
-# -----------------------------
 st.set_page_config(
-    page_title="연애상담 챗봇",
-    page_icon="💌",
+    page_title="수행평가 정리",
+    page_icon="📚",
+    layout="wide"
 )
 
-st.title("💌 연애상담 챗봇")
-st.caption("Gemini 2.5 Flash Lite 기반 상담 챗봇")
+DATA_FILE = "data.json"
 
-# -----------------------------
-# API 키 불러오기
-# -----------------------------
-try:
-    api_key = st.secrets["GEMINI_API_KEY"]
-except Exception:
-    st.error("Secrets에 GEMINI_API_KEY가 설정되지 않았습니다.")
-    st.stop()
 
-# -----------------------------
-# Gemini 클라이언트 생성
-# -----------------------------
-try:
-    client = genai.Client(api_key=api_key)
-except Exception as e:
-    st.error(f"Gemini 클라이언트 생성 오류: {e}")
-    st.stop()
+# 데이터 불러오기
+def load_data():
+    try:
+        if os.path.exists(DATA_FILE):
+            with open(DATA_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        return []
+    except:
+        return []
 
-# -----------------------------
-# 세션 상태 초기화
-# -----------------------------
-if "messages" not in st.session_state:
-    st.session_state.messages = [
-        {
-            "role": "assistant",
-            "content": (
-                "안녕하세요 😊\n"
-                "연애 고민이 있다면 편하게 이야기해주세요!"
-            ),
-        }
-    ]
 
-# -----------------------------
-# 이전 채팅 표시
-# -----------------------------
-for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.markdown(message["content"])
+# 데이터 저장
+def save_data(data):
+    try:
+        with open(DATA_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=4)
+    except:
+        st.error("데이터 저장 중 오류가 발생했습니다.")
 
-# -----------------------------
-# 사용자 입력
-# -----------------------------
-user_input = st.chat_input("연애 고민을 입력하세요...")
 
-if user_input:
-    # 사용자 메시지 저장
-    st.session_state.messages.append(
-        {
-            "role": "user",
-            "content": user_input,
-        }
-    )
+tasks = load_data()
 
-    # 사용자 메시지 출력
-    with st.chat_message("user"):
-        st.markdown(user_input)
+# 사이드바 메뉴
+menu = st.sidebar.radio(
+    "메뉴 선택",
+    ["🏠 메인", "➕ 수행평가 추가"]
+)
 
-    # AI 응답 생성
-    with st.chat_message("assistant"):
-        message_placeholder = st.empty()
+# -------------------
+# 메인 페이지
+# -------------------
+if menu == "🏠 메인":
 
-        try:
-            # Gemini용 대화 기록 변환
-            history = []
+    st.title("📚 수행평가 정리")
 
-            for msg in st.session_state.messages[:-1]:
-                role = "user" if msg["role"] == "user" else "model"
+    if not tasks:
+        st.info("등록된 수행평가가 없습니다.")
+    else:
 
-                history.append(
-                    types.Content(
-                        role=role,
-                        parts=[types.Part(text=msg["content"])],
-                    )
-                )
+        today = date.today()
 
-            response = client.models.generate_content(
-                model="gemini-2.5-flash-lite",
-                contents=history + [
-                    types.Content(
-                        role="user",
-                        parts=[types.Part(text=user_input)],
-                    )
-                ],
-                config=types.GenerateContentConfig(
-                    temperature=0.8,
-                    max_output_tokens=500,
-                    system_instruction=(
-                        "너는 공감 능력이 좋은 연애상담 챗봇이다. "
-                        "사용자의 고민을 따뜻하고 현실적으로 상담해줘. "
-                        "무조건적인 편들기보다 균형 있게 조언해줘."
-                    ),
-                ),
+        sorted_tasks = sorted(
+            tasks,
+            key=lambda x: (
+                date.fromisoformat(x["deadline"]) - today
+            ).days
+        )
+
+        st.subheader("다가오는 수행평가")
+
+        for idx, task in enumerate(sorted_tasks):
+
+            deadline = date.fromisoformat(task["deadline"])
+            d_day = (deadline - today).days
+
+            if d_day > 0:
+                dday_text = f"D-{d_day}"
+                color = "#e8f5e9"
+            elif d_day == 0:
+                dday_text = "🔥 오늘 마감"
+                color = "#fff3cd"
+            else:
+                dday_text = f"❌ D+{abs(d_day)}"
+                color = "#f8d7da"
+
+            st.markdown(
+                f"""
+                <div style="
+                background:{color};
+                padding:15px;
+                border-radius:10px;
+                margin-bottom:10px;">
+                    <h4>{task['subject']}</h4>
+                    <b>{task['title']}</b><br>
+                    마감일: {task['deadline']}<br>
+                    <h3>{dday_text}</h3>
+                </div>
+                """,
+                unsafe_allow_html=True
             )
 
-            ai_response = response.text
+            if st.button(
+                f"삭제 - {task['subject']} / {task['title']}",
+                key=f"delete_{idx}"
+            ):
+                tasks.remove(task)
+                save_data(tasks)
+                st.rerun()
 
-            message_placeholder.markdown(ai_response)
+# -------------------
+# 추가 페이지
+# -------------------
+elif menu == "➕ 수행평가 추가":
 
-            # 응답 저장
-            st.session_state.messages.append(
-                {
-                    "role": "assistant",
-                    "content": ai_response,
-                }
-            )
+    st.title("➕ 수행평가 추가")
 
-        except Exception as e:
-            error_message = (
-                "⚠️ 오류가 발생했습니다.\n\n"
-                f"오류 내용: {str(e)}"
-            )
+    with st.form("task_form"):
 
-            message_placeholder.error(error_message)
+        subject = st.text_input("과목명")
 
-            st.session_state.messages.append(
-                {
-                    "role": "assistant",
-                    "content": error_message,
-                }
-            )
+        title = st.text_input("수행평가명")
 
-# -----------------------------
-# 사이드바 기능
-# -----------------------------
-with st.sidebar:
-    st.header("설정")
+        deadline = st.date_input(
+            "마감일",
+            min_value=date.today()
+        )
 
-    if st.button("대화 초기화"):
-        st.session_state.messages = [
-            {
-                "role": "assistant",
-                "content": "안녕하세요 😊 연애 고민을 다시 들려주세요!",
-            }
-        ]
-        st.rerun()
+        submit = st.form_submit_button("저장")
 
-    st.markdown("---")
-    st.caption("Model: gemini-2.5-flash-lite")
+        if submit:
+
+            if not subject.strip():
+                st.warning("과목명을 입력하세요.")
+            elif not title.strip():
+                st.warning("수행평가명을 입력하세요.")
+            else:
+
+                tasks.append({
+                    "subject": subject.strip(),
+                    "title": title.strip(),
+                    "deadline": str(deadline)
+                })
+
+                save_data(tasks)
+
+                st.success("저장되었습니다!")
