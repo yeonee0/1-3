@@ -1,49 +1,26 @@
-import streamlit as st
-import json
-import os
 from datetime import datetime, date
-
-DATA_FILE = "data.json"
-
-def load_data():
-    if os.path.exists(DATA_FILE):
-        with open(DATA_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    return []
 
 st.title("수행평가 정리")
 
-data = load_data()
+tasks = load_tasks()
 
-if not data:
-    st.info("등록된 수행평가가 없습니다.")
+today = date.today()
 
-else:
+for task in tasks:
+    target_date = datetime.strptime(
+        task["date"],
+        "%Y-%m-%d"
+    ).date()
 
-    today = date.today()
+    dday = (target_date - today).days
 
-    for item in data:
+    if dday > 0:
+        dday_text = f"D-{dday}"
+    elif dday == 0:
+        dday_text = "D-DAY"
+    else:
+        dday_text = f"D+{abs(dday)}"
 
-        deadline = datetime.strptime(
-            item["deadline"],
-            "%Y-%m-%d"
-        ).date()
-
-        dday = (deadline - today).days
-
-        if dday > 0:
-            text = f"D-{dday}"
-        elif dday == 0:
-            text = "오늘 마감"
-        else:
-            text = f"D+{abs(dday)}"
-
-        st.markdown(
-            f"""
-            ### 📚 {item['subject']}
-            👤 {item['name']}
-
-            **{text}**
-            ---
-            """
-        )
+    st.write(
+        f"📚 {task['subject']} | 📅 {task['date']} | 🔥 {dday_text}"
+    )
