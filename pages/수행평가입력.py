@@ -10,7 +10,7 @@ if os.path.exists(DATA_FILE):
 else:
     tasks = []
 
-st.title("조윤태 수행평가 입력")
+st.title("수행평가 입력")
 
 subject = st.text_input("과목")
 exam_date = st.date_input("날짜")
